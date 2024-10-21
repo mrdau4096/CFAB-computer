@@ -2,7 +2,7 @@
 
 r0 = #0
 r1 = #1
-r2 = #128
+r2 = #127
 //Set up the constants beforehand
 
 :loop
@@ -12,3 +12,4 @@ r0 < r2
 BRN :loop rOP
 //Add 1 to r0, then compare it to r2.
 //if r0 doesnt equal r2 then loop until it does.
+
