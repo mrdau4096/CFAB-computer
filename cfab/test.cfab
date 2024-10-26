@@ -2,7 +2,7 @@
 r1 + r22
 rOP ~ r0
 r2 & r7
-r1 = #244
+r1 = #116
 r2 == r3
 :markerTest
 brn :markerTest r1

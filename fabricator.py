@@ -93,10 +93,18 @@ def toBin(value, signed=False):
 def SET(register, value):
 	return opcodes["set"] + register + toBin(int(value) + 128)
 
+def BRN(line, condition):
+	binaryLine = str(bin(line)[2:]).zfill(16)
+	halfA, halfB = int(binaryLine[:8], 2), int(binaryLine[8:], 2)
+	return (
+		opcodes["set"] + toBin(248) + toBin(halfA), #Set first JMP register to the first 8 bits.
+		opcodes["set"] + toBin(249) + toBin(halfB), #Set second JMP register to the final 8 bits.
+		opcodes["brn"] + toBin(condition) + toBin(0),
+	)
 
 def convertAllToBin(operator, A, B):
 	width, height, blank = toBin(24), toBin(16), "0000"
-	zero, one, rT, rF, rX, rY, rCol, rOP = toBin(0), toBin(1), toBin(250), toBin(251), toBin(252), toBin(253), toBin(254), toBin(255)
+	zero, one, rT, rF, rX, rY, rCol, rOP = toBin(0), toBin(1), 250, 251, toBin(252), toBin(253), toBin(254), toBin(255)
 	
 	match operator:
 		case "mov" | "and" | "or" | "lss" | "equ" | "gtr" | "add" | "sub" | "mul" | "div" | "rec" | "lne":
@@ -122,7 +130,7 @@ def convertAllToBin(operator, A, B):
 
 		case "inv":
 			return (
-				opcodes["sub"] + rF + toBin(A),
+				opcodes["sub"] + toBin(rF) + toBin(A),
 			)
 
 		case "mod":
@@ -151,19 +159,13 @@ def convertAllToBin(operator, A, B):
 			)
 
 		case "jmp":
-			return (
-				opcodes["brn"] + toBin(A) + rT,
-			)
+			return BRN(A, rT)
 
 		case "brn":
-			return (
-				opcodes["brn"] + toBin(A + 1) + toBin(B),
-			)
+			return BRN(A, B)
 
 		case "ext":
-			return (
-				opcodes["brn"] + toBin(markers["_end"]) + rT,
-			)
+			return BRN(markers["_end"], rT)
 
 		case "col":
 			return (
@@ -235,7 +237,7 @@ def convertLine(line):
 		A, operator, B = operands
 		operator = infixOperatorsList[operator]
 
-	elif operands[0] in ("ext", "lse", "gte", "inv", "sgn", "jmp", "col", "pix", "clr", "ptr"):
+	elif operands[0] in ("ext", "lse", "gte", "inv", "sgn", "jmp", "col", "pix", "clr", "ptr", "xor", "mod"):
 		#Chained or unusual operators
 		operator, A, B = operands
 
@@ -256,8 +258,8 @@ def convertLine(line):
 
 
 if __name__ == "__main__":
-	filename = "testgraphics"
-	with open(f"{filename}.cfab", "r") as CFABFile:
+	filename = "testloop"
+	with open(f"cfab\\{filename}.cfab", "r") as CFABFile:
 		readlines = CFABFile.readlines()
 		partial_lines = [line.strip().lower() for line in readlines if not line.startswith("//")]
 		lines = [line for line in partial_lines if line != ""]
@@ -276,10 +278,15 @@ if __name__ == "__main__":
 		for line in lines:
 			if not line.startswith(":"):
 				fabricated.extend(convertLine(line))
-		
-		combinedBytes = ""
-		for hexInstruction in fabricated:
-			combinedBytes += hexInstruction
 
-	with open(f"{filename}.dat", "w") as outFile:
+		
+		combinedHex = ""
+		for hexInstruction in fabricated:
+			combinedHex += hexInstruction
+
+		if len(combinedHex) % 2 == 1: combinedHex += "0"
+
+		combinedBytes = bytes.fromhex(combinedHex)
+
+	with open(f"data\\{filename}.dat", "wb") as outFile:
 		outFile.write(combinedBytes)
