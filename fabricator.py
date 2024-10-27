@@ -23,7 +23,7 @@ _____|_____|__________
 #Processing Functions
 """
 SET 		|	 set A = B 							|	Sets the value in reg A to constant B.
-MOV 		|    mov A B 							|	Moves the value in register A to register B.
+MOV 		|	 mov A B 							|	Moves the value in register A to register B.
 AND			|	 A and B 							|	If A and B.
 OR			|	 A or B 							|	If A or B.
 NOT			|	 not A {B unused}					|	If A is false.
@@ -43,8 +43,11 @@ ABS			|	 abs A {B unused}					|	Sets the MSB to 1. That's it.
 SGN			|	 A / (abs A) {B unused}				|	Gets the sign of A (8 bit values, so MSB; written mathmatically for completeness.)
 BRN			|	 brn A if B is 1 {Conditional}		|	Jumps to A if reg B is 1.
 JMP			|	 brn A 1 {B unused} {Unconditional}	|	Jumps to a marker without a comparison
-EXT 		|    brn :_end 1 {Unconditional}		|	Exit immediately (Jump to end marker)
+EXT 		|	 brn :_end 1 {Unconditional}		|	Exit immediately (Jump to end marker)
 {marker}	|	 :A {B unused}						|	Marker. Used to branch to.
+DEF/END	 |	def %macroName {args}; ...; end 	|	Used to define a macro. Contents of macro added wherever called. Takes {args}.
+{macro call}| 	 %macroName {args} 					|	Calls a pre-defined macro. Contents of macro added whenever called. Takes {args}.
+{alias}		|	 $aliasName @ A 					|	Every time $aliasName is encountered, replace with register A (useful for programming formatting.)
 """
 
 #Graphics Functions
@@ -73,10 +76,18 @@ infixOperatorsList = {
 }
 
 
+
+class FabricationError(Exception):
+	def __init__(self, error="Fabrication Failed!"):
+		self.message = f"Fabrication Error; {error}"
+		super().__init__(self.message)
+
+
+
 def toBin(value, signed=False):
 	if signed:
 		if not (-128 <= value < 128):
-			raise ValueError(f"Value {value} out of range [-128 - 127] for signed 8-bit integer")
+			raise FabricationError(f"Immediate values must be signed 8-bit Integers [-128 → 127]: Encountered value of {value}")
 	
 		if value < 0:
 			# Handle two's complement for negative values
@@ -85,13 +96,17 @@ def toBin(value, signed=False):
 			return format(value, '08b')
 	else:
 		if not (0 <= value < 256):
-			raise ValueError(f"Value {value} out of range [0 - 256] for unsigned 8-bit integer")
+			raise FabricationError(f"Register indices must be unsigned 8-bit Integers [0 → 255]: Encountered value of {value}")
 
 		return format(value, '08b')
 
 
+
+
 def SET(register, value):
 	return opcodes["set"] + register + toBin(int(value) + 128)
+
+
 
 def BRN(line, condition):
 	binaryLine = str(bin(line)[2:]).zfill(16)
@@ -101,6 +116,8 @@ def BRN(line, condition):
 		opcodes["set"] + toBin(249) + toBin(halfB), #Set second JMP register to the final 8 bits.
 		opcodes["brn"] + toBin(condition) + toBin(0),
 	)
+
+
 
 def convertAllToBin(operator, A, B):
 	width, height, blank = toBin(24), toBin(16), "0000"
@@ -193,32 +210,26 @@ def convertAllToBin(operator, A, B):
 			)
 
 		case _:
-			raise ValueError(f"Unknown operator; {operator}, {A}, {B}")
+			raise FabricationError(f"Unknown Command encountered: {operator} {a} {b}")
+
 
 
 def convertValues(A):
-	if A == "rt":
-		return 250
-	elif A == "rt":
-		return 251
-	elif A == "rx":
-		return 252
-	elif A == "ry":
-		return 253
-	elif A == "rcol":
-		return 254
-	elif A == "rop":
-		return 255
-	elif A.startswith("r"):
+	if A.startswith("r"):
 		return int(A.replace("r", ""))
 	elif A.startswith("#"):
 		return int(A.replace("#", ""))
 	elif A[0] == "c":
-		return int(A[1:], 16)
+		colourIndex = int(A[1:], 16)
+		if colourIndex > 15:
+			raise FabricationError(f"Colour indices cannot be out of range [0 → 15]: Encountered value {colourIndex}")
+		return colourIndex
 	elif A.startswith(":"):
 		return markers[A.replace(":", "")]
 	else:
 		return str(A) #Ensure the fallback is a string.
+
+
 
 def convertLine(line):
 	operands = line.split(" ")
@@ -246,7 +257,7 @@ def convertLine(line):
 		operator = infixOperatorsList[operator]
 
 	else:
-		raise ValueError(f"Unknown values; {operands}")
+		raise FabricationError(f"Unknown Command encountered: {operands}")
 
 	A = convertValues(A)
 	B = convertValues(B)
@@ -257,29 +268,177 @@ def convertLine(line):
 
 
 
+def replaceMacros(lines, depth=0, activeMacros=None, previousMacro=None):
+	if activeMacros is None:
+		activeMacros = set()
+	macrosReplaced = []
+	lineNum = 0
+
+
+	#Check for excessive recursion depth to prevent absurdly long chaining.
+	maxRecursionDepth = 32
+	if depth > maxRecursionDepth:
+		raise FabricationError("Exceeded maximum macro recursion depth (32)")
+
+	while lineNum < len(lines):
+		curLine = lines[lineNum]
+
+		#Macro has been defined.
+		if curLine.startswith("def"):
+			macroData = curLine.split(" ")
+			if len(macroData) < 2:
+				raise FabricationError(f"Macro definition missing name and/or parameters: {curLine}")
+
+			macroName = macroData[1].replace("%", "")
+			macroParams = macroData[2:]
+			macroLines = []
+			i = 0
+
+			#Save the contents of the macro.
+			while True:
+				i += 1
+				macroLine = lines[lineNum + i]
+				if macroLine.startswith("end"):
+					lineNum += i
+					macros[macroName] = (macroLines, macroParams)
+					break
+				macroLines.append(macroLine)
+
+
+		#Macro has been called.
+		elif curLine.startswith("%"):
+			lineData = curLine.split(" ")
+			macroName = lineData[0][1:]
+
+			#Check the macro was defined beforehand.
+			if macroName not in macros:
+				raise FabricationError(f"Macro %{macroName} is not defined.")
+
+			#Prevent macros from making infinite recursive loops.
+			if macroName in activeMacros:
+				if previousMacro is None:
+					errorMessage = f"Infinite Recursion; Attempted to unpack %{macroName}."
+				elif previousMacro == macroName:
+					errorMessage = f"Infinite Recursion; Attempted to unpack %{macroName} within itself"
+				else:
+					errorMessage = f"Infinite Recursion; Attempted to unpack %{macroName} within %{previousMacro}.\nThis resulted in a chain of macros, in a loop."
+
+				raise FabricationError(errorMessage)
+
+
+			#Begin expansion of macro
+			macroLines, macroParams = macros[macroName]
+			if len(lineData[1:]) != len(macroParams):
+				raise FabricationError(f"Macro {macroName} expects {len(macroParams)} arguments, but got {len(lineData[1:])}")
+
+			#Change macro args to their called counterparts.
+			paramMapping = dict(zip(macroParams, lineData[1:]))
+			activeMacros.add(macroName)  # Track macro to prevent re-expansion
+
+
+			#Expand the macro to the line it was called at.
+			expandedLines = []
+			for macroLine in macroLines:
+				processedLine = macroLine
+				for param, arg in paramMapping.items():
+					processedLine = processedLine.replace(param, arg)
+				expandedLines.append(processedLine)
+
+
+			#If a macro was found inside this macro, recursively unpack that too.
+			macrosReplaced.extend(replaceMacros(expandedLines, depth + 1, activeMacros, macroName))
+			activeMacros.remove(macroName)
+
+
+		#Any other lines.
+		else:
+			macrosReplaced.append(curLine)
+
+		lineNum += 1
+
+	return macrosReplaced
+
+
+
+def replaceAliases(lines):
+	aliases = {
+		"rt": "r250",
+		"rf": "r251",
+		"rx": "r252",
+		"ry": "r253",
+		"rcol": "r254",
+		"rop": "r255",
+	}
+	aliasReplaced = []
+
+	for lineNum, curLine in enumerate(lines):
+		#print(curLine)
+		"""
+		Define aliasing for register names like so;
+		 varName  @ r1
+		Every time varName is written, it is replaced by r1 by the fabricator.
+		Allows for nicer formatting of CFAB.
+		"""
+		operands = curLine.split(" ")
+		if len(operands) == 3:
+			if operands[1] == "@":
+				aliases[operands[0].replace("$", "")] = operands[2]
+				continue
+
+		fixedLine = curLine
+		for alias, reg in aliases.items():
+			fixedLine = fixedLine.replace(f"${alias}", reg).replace(alias, reg)
+
+		if fixedLine not in aliasReplaced:
+			aliasReplaced.append(fixedLine)
+
+	return aliasReplaced
+
+
+
+
 if __name__ == "__main__":
-	filename = "testloop"
+	filename = "testgraphics"
 	with open(f"cfab\\{filename}.cfab", "r") as CFABFile:
 		readlines = CFABFile.readlines()
 		partial_lines = [line.strip().lower() for line in readlines if not line.startswith("//")]
 		lines = [line for line in partial_lines if line != ""]
-		markers = {}
 
-		for curLine in lines:
+
+		macros, markers = {}, {}
+		macrosReplaced = replaceMacros(lines)
+		aliasReplaced = replaceAliases(macrosReplaced)
+		del macrosReplaced
+
+
+		for curLine in aliasReplaced:
 			if curLine.startswith(":"):
-				markers[curLine.replace(":", "")] = [accLine for accLine in lines if ((not (accLine.startswith(":") or accLine == "" or accLine.startswith("//"))) or accLine == curLine)].index(curLine)+1
-		markers["_end"] = len(lines)-1
+				"""
+				Process markers, which are written like so;
+				 :marker
+				You may jump back to these using BRN, JMP or EXT commands, like so;
+				 JMP :marker
+				EXT Always jumps to the final line of the instructions.
+				"""
+				markers[curLine.replace(":", "")] = [accLine for accLine in aliasReplaced if ((not (accLine.startswith(":") or accLine == "" or accLine.startswith("//"))) or accLine == curLine)].index(curLine)+1
+		markers["_end"] = len(aliasReplaced)-1
 
 
 		preInstructions = []
-		preInstructions.extend(convertAllToBin("set", 250, 1)) #rT
-		preInstructions.extend(convertAllToBin("set", 251, 0)) #rF
+		preInstructions.extend(convertAllToBin("set", 250, 1)) #rT | Always a value of 1, True.
+		preInstructions.extend(convertAllToBin("set", 251, 0)) #rF | Always a value of 0, False.
 		fabricated = [f"{int(instruction, 2):05X}" for instruction in preInstructions]
-		for line in lines:
+		#print(aliasReplaced)
+		for line in aliasReplaced:
 			if not line.startswith(":"):
+				#Convert lines using convertLine().
 				fabricated.extend(convertLine(line))
 
+		del macros, markers
+		del aliasReplaced, preInstructions
+
 		
+		#Make the list of hex instructions into a set of bytes.
 		combinedHex = ""
 		for hexInstruction in fabricated:
 			combinedHex += hexInstruction
@@ -288,5 +447,7 @@ if __name__ == "__main__":
 
 		combinedBytes = bytes.fromhex(combinedHex)
 
+
 	with open(f"data\\{filename}.dat", "wb") as outFile:
+		#Write to a file.
 		outFile.write(combinedBytes)
