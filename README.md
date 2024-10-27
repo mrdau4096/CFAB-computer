@@ -1,3 +1,4 @@
+
 # CFAB-Interpreter
 _Simple mock-up 16 instruction assembly language with interpreter._
 
@@ -6,12 +7,12 @@ _Simple mock-up 16 instruction assembly language with interpreter._
 - All values stored in registers are -128 → 128 (signed 8 bit int)
 - There are 256 registers to use. Screen & frameBuffer are 24x16.
 - CFAB Files have a 65,536 instruction limit (past that value, JMP, BRN and EXT stop functioning correctly.)
-- 1 CFAB Command ≠ 1 Instruction.
+- 1 CFAB Command ≠ 1 instruction
 
 ### Important Registers;
 | Index | Alias | Description |
 | :---: | :---: | --- |
-| `r0 & r1` | `N/A` | Generally used by some of the data-processing functions,not reccomended to be assigned by user for risk of overwrites.
+| `r0 & r1` | `N/A` | Generally used by some of the data-processing functions,not reccomended to be assigned by user for risk of being overwritten.
 | `r248 r249` | `N/A` | Used in combination as 2 unsigned 8-bit integers, to become a singular unsigned 16-bit integer instruction to jump to.
 | `r250 ` | `rT` | A register that is ALWAYS True.
 | `r251 ` | `rF` | A register that is ALWAYS False.
@@ -82,7 +83,7 @@ _Used with COL, as_ `COL c{hex}`
 
 
 ### The Instruction-set;
-| _Name_ | _Hex_ | _Function_ |    | _Name_ | _Hex_ | _Function_ |
+| _Name_ | _Hex_ | _Function_ |     | _Name_ | _Hex_ | _Function_ |
 | :---: | :---: | --- | --- | :---: | :---: | --- |
 | `SET` | `0` | Sets register A to value B | | `ADD` | `8` | Sum of A and B |
 | `MOV` | `1` | Moves contents of register A to register B | | `SUB` | `9` | Sum of A and -B |
