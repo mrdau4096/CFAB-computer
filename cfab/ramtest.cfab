@@ -2,3 +2,4 @@ r0 = #12
 r1 = #8
 r0 + r1
 RAMwrite #0 rOP
+RAMread #0

@@ -108,93 +108,96 @@ def SET(register, value):
 
 
 
-def BRN(line, condition):
+def BRN(line, condition, bits):
 	binaryLine = str(bin(line)[2:]).zfill(16)
 	halfA, halfB = int(binaryLine[:8], 2), int(binaryLine[8:], 2)
 	return (
-		opcodes["set"] + toBin(248) + toBin(halfA), #Set first JMP register to the first 8 bits.
-		opcodes["set"] + toBin(249) + toBin(halfB), #Set second JMP register to the final 8 bits.
-		opcodes["brn"] + toBin(condition) + toBin(0),
+		"0011" + SET(toBin(10), halfA), #Set first JMP register to the first 8 bits.
+		"0011" + SET(toBin(9), halfB), #Set second JMP register to the final 8 bits.
+		"00" + bits[2] + "0" + opcodes["brn"] + toBin(condition) + toBin(0),
 	)
 
 
 
-def convertAllToBin(operator, A, B):
+def convertAllToBin(operator, convertedA, convertedB):
 	width, height, blank = toBin(24), toBin(16), "0000"
-	zero, one, rT, rF, rX, rY, rCol, rOP = toBin(0), toBin(1), toBin(16), toBin(17), toBin(252), toBin(253), toBin(254), toBin(255)
+	zero, one, rOP = toBin(0), toBin(1), toBin(15)
+
+	initial4Bits = f"00{str(int(bool(convertedA[0])))}{str(int(bool(convertedB[0])))}"
+	A, B = convertedA[1], convertedB[1]
 	
 	match operator:
 		case "mov" | "and" | "or" | "lss" | "equ" | "gtr" | "add" | "sub" | "mul" | "div" | "rec" | "lne":
 			return (
-				opcodes[operator] + toBin(A) + toBin(B),
+				initial4Bits + opcodes[operator] + toBin(A) + toBin(B),
 			)
 
 		case "set":
 			return (
-				SET(toBin(A), B),
+				initial4Bits + SET(toBin(A), B),
 			)
 
 		case "not" | "abs":
 			return (
-				opcodes[operator] + toBin(A) + blank,
+				initial4Bits + opcodes[operator] + toBin(A) + blank,
 			)
 
 		case "sgn":
 			return (
-				opcodes["abs"] + toBin(A) + blank,
-				opcodes["div"] + toBin(A) + rOP,
+				initial4Bits + opcodes["abs"] + toBin(A) + blank,
+				initial4Bits[:3] + "0" + opcodes["div"] + toBin(A) + rOP,
 			)
 
 		case "inv":
 			return (
-				opcodes["sub"] + toBin(rF) + toBin(A),
+				"000" + initial4Bits[3] + opcodes["sub"] + zero + toBin(A),
 			)
 
 		case "mod":
 			return (
-				opcodes["div"] + toBin(A) + toBin(B),
-				opcodes["mul"] + rOP + toBin(B),
-				opcodes["sub"] + toBin(A) + rOP,
+				initial4Bits + opcodes["div"] + toBin(A) + toBin(B),
+				"000" + initial4Bits[3] + opcodes["mul"] + rOP + toBin(B),
+				"000" + initial4Bits[3] + opcodes["sub"] + toBin(A) + rOP,
 			)
 
 		case "xor":
 			return (
-				opcodes["equ"] + toBin(A) + toBin(B),
-				opcodes["not"] + rOP + blank,
+				initial4Bits + opcodes["equ"] + toBin(A) + toBin(B),
+				blank + opcodes["not"] + rOP + blank,
 			)
 
 		case "gte":
 			return (
-				opcodes["lss"] + toBin(A) + toBin(B),
-				opcodes["not"] + rOP + blank,
+				initial4Bits + opcodes["lss"] + toBin(A) + toBin(B),
+				blank + opcodes["not"] + rOP + blank,
 			)
 
 		case "lse":
 			return (
 				opcodes["gtr"] + toBin(A) + toBin(B),
-				opcodes["not"] + rOP + blank,
+				blank + opcodes["not"] + rOP + blank,
 			)
 
 		case "jmp":
-			return BRN(A, rT)
+			return BRN(A, one, initial4Bits)
 
 		case "brn":
-			return BRN(A, B)
+			return BRN(A, B, initial4Bits)
 
 		case "ext":
-			return BRN(markers["_end"], rT)
+			return BRN(markers["_end"], one, initial4Bits)
 
 		case "ramread":
 			return (
-				SET(toBin(14), A),
-				opcodes["mov"] + toBin(12) + rOP,
+				"000" + initial4Bits[3] + SET(toBin(14), A),
+				"0000" + opcodes["mov"] + toBin(12) + rOP,
 			)
 
 		case "ramwrite":
 			return (
-				SET(toBin(14), A),
-				opcodes["mov"] + toBin(B) + toBin(13),
-				opcodes["mov"] + rT + toBin(11),
+				"000" + initial4Bits[3] + SET(toBin(14), A),
+				"00" + initial4Bits[3] + "0" + opcodes["mov"] + toBin(B) + toBin(13),
+				"0001" + SET(toBin(11), one),
 			)
 
 		case "col":
@@ -218,16 +221,16 @@ def convertValues(A):
 	if A.startswith("r"):
 		registerIndex = int(A.replace("r", ""))
 		if registerIndex > 17: raise FabricationError(f"r{registerIndex} is out of range for registers.\nr0-r15 for values\nr16-r17 for true/false.")
-		return registerIndex
+		return False, registerIndex
 
 	elif A.startswith("#"):
-		return int(A.replace("#", ""))
+		return True, int(A.replace("#", ""))
 
 	elif A.startswith(":"):
-		return markers[A.replace(":", "")]
+		return None, markers[A.replace(":", "")]
 
 	else:
-		return str(A) #Ensure the fallback is a string.
+		return None, str(A) #Ensure the fallback is a string.
 
 
 
@@ -255,11 +258,11 @@ def convertLine(line):
 	else:
 		raise FabricationError(f"Unknown Command encountered: {operands}")
 
-	A = convertValues(A)
-	B = convertValues(B)
+	convertedA = convertValues(A)
+	convertedB = convertValues(B)
 
-	instructionList = convertAllToBin(operator, A, B)
-	hexList = [f"{int(instruction, 2):05X}" for instruction in instructionList]
+	instructionList = convertAllToBin(operator, convertedA, convertedB)
+	hexList = [f"{int(instruction, 2):06X}" for instruction in instructionList]
 	return hexList
 
 

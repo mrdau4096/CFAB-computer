@@ -28,7 +28,7 @@ int8_t randomAccessMemory[256];
 
 
 //Debug and other testing bools.
-const bool printInstructionCalls = false;
+const bool printInstructionCalls = true;
 const bool debugFrameBuffer = false;
 
 
@@ -249,11 +249,9 @@ int main() {
 	vector<uint8_t> instructionData;
 	
 	//Instruction related variables;
-	int function, ptX, ptY, colour;
-	int xDist, yDist, xSign, ySign, err;
-	int xCoord, yCoord;
-	uint8_t A, B, result, byte1, byte2, byte3, jumpHalfLower, jumpHalfUpper;
-	uint16_t binJumpLine;
+	int8_t result, byte1, byte2, byte3;
+	uint8_t jumpHalfLower, jumpHalfUpper;
+	uint16_t jumpLine;
 	bool registerManipulationFunction, updateOutput;
 
 
@@ -265,7 +263,7 @@ int main() {
 	if (!loadInstructions(fullFilePath, instructionData)) {
 		return -1;
 	}
-	int maxInstructions = instructionData.size() / 2.5;
+	int maxInstructions = instructionData.size() / 3;
 
 
 
@@ -305,32 +303,25 @@ int main() {
 	//Main instruction loop;
 	//(Iterates through instructions in instructionData.)
 	while ((instructionNum < maxInstructions) && !glfwWindowShouldClose(window)) {
-		int offset = floor(instructionNum / 2);
-		int baseIndex = instructionNum * 2 + offset;
+		int baseIndex = instructionNum * 3;
 
-		if (instructionNum % 2 == 0) { // Even-index instructions
-			byte1 = instructionData[baseIndex];
-			byte2 = instructionData[baseIndex + 1];
-			byte3 = instructionData[baseIndex + 2];
-			function = byte1 >> 4;
-			A = ((byte1 & 0b00001111) << 4) | (byte2 >> 4);
-			B = ((byte2 & 0b00001111) << 4) | (byte3 >> 4);
-		} else { // Odd-index instructions
-			byte1 = instructionData[baseIndex];
-			byte2 = instructionData[baseIndex + 1];
-			byte3 = instructionData[baseIndex + 2];
-			function = (byte1 & 0b00001111);
-			A = byte2;
-			B = byte3;
-		}
+		//Read Bytes from file.
+		byte1 = instructionData[baseIndex];
+		byte2 = instructionData[baseIndex + 1];
+		byte3 = instructionData[baseIndex + 2];
+		bool AImmediate =  (byte1 & 0b00100000);
+		bool BImmediate =  (byte1 & 0b00010000);
+		uint8_t function = (byte1 & 0b00001111);
+		uint8_t operandA = byte2;
+		uint8_t operandB = byte3;
 
+		int8_t *regA = &registers[operandA];
+		int8_t *regB = &registers[operandB];
+
+		int8_t A = (AImmediate) ? static_cast<int8_t>(operandA) - 128 : registers[operandA];
+		int8_t B = (BImmediate) ? static_cast<int8_t>(operandB) - 128 : registers[operandB];
 
 
-		if (function > 2) {
-			//For all non-immediate values, 16 is True and 17 is False.
-			A = (A > 15) ? ((A > 16) ? 0 : 1) : A;
-			B = (B > 15) ? ((B > 16) ? 0 : 1) : B;
-		}
 
 		//For logical functions, 0 is false and any other value is true.
 		result = 0;
@@ -342,42 +333,39 @@ int main() {
 
 
 			case 1:		//SET - Sets reg A to value B
-				if (printInstructionCalls) {print(string("SET") + " r" + to_string(A) + " to the value: " + to_string(B - 128));}
+				if (printInstructionCalls) {print(string("SET") + " r" + to_string(operandA) + " to the value: " + to_string(B));}
 				updateOutput = false;
-				if (A > 15) {
-					//Do not accept this; it is simply a true/false immediate value not a register.
+				if (AImmediate || !BImmediate) {
+					//Do not accept this; You cannot set an immediate value to another.
+					//You ARE allowed to SET 1 register to another; This copys the data. MOV moves the data.
 					break;
 				}
 
-				registers[A] = static_cast<int8_t>(B) - 128;  // Treat B as signed
+				*regA = B;
 
 
 				//Only the SET and MOV commands can affect RAM, so check here.
 				//Set the RAM Address to contain the input data if the write register is true.
 				if (registers[11]) {
 					registers[11] = 0;
-					//Is RAM index correct?
-					randomAccessMemory[registers[14] + 128] = registers[13];
+					randomAccessMemory[registers[14]] = registers[13];
 				}
 
 				//Set the READ Register to the contents of the current RAM address.
-				registers[12] = randomAccessMemory[registers[14] + 128];
+				registers[12] = randomAccessMemory[registers[14]];
 
 				break;
 
 
 			case 2:		//MOV - Moves contents of reg A to reg B
-				if (printInstructionCalls) {print(string("MOV") + " contents of r" + to_string(A) + " to r" + to_string(B));}
-				if (A > 15 and B < 16) {
-					//True/False values
-					registers[B] = (A > 16) ? 0 : 1;
-				} else if (B > 15) {
-					//Do not attempt to write to a pseudo-register.
+				if (printInstructionCalls) {print(string("MOV") + ", contents of r" + to_string(operandA) + " to r" + to_string(operandB));}
+				if (AImmediate || BImmediate) {
+					//You cannot MOV immediate values to each other. Use SET.
 					break;
-				} else {
-					registers[B] = registers[A];
-					registers[A] = 0;
 				}
+
+				*regB = *regA;
+				*regA = 0;
 				updateOutput = false;
 
 
@@ -395,84 +383,86 @@ int main() {
 
 
 			case 3:		//AND - Logical AND of A and B
-				if (printInstructionCalls) {print(string("AND") + " r" + to_string(A) + " r" + to_string(B));}
-				result = registers[A] & registers[B];
+				if (printInstructionCalls) {print(string("AND") + ", values; " + to_string(A) + " & " + to_string(B));}
+				result = A & B;
 				break;
 
 
 			case 4:		//OR  - Logical OR of A and B
-				if (printInstructionCalls) {print(string("OR ") + " r" + to_string(A) + " r" + to_string(B));}
-				result = registers[A] || registers[B];
+				if (printInstructionCalls) {print(string("OR ") + ", values; " + to_string(A) + " | " + to_string(B));}
+				result = A || B;
 				break;
 
 
 			case 5:		//NOT - Logical NOT of A {B unused}
-				if (printInstructionCalls) {print(string("NOT") + " r" + to_string(A));}
-				result = !registers[A];
+				if (printInstructionCalls) {print(string("NOT") + ", !" + to_string(A));}
+				result = !A;
 				break;
 
 
 			case 6:		//LSS - If A is less than B
-				if (printInstructionCalls) {print(string("LSS") + " r" + to_string(A) + " r" + to_string(B));}
-				result = registers[A] < registers[B];
+				if (printInstructionCalls) {print(string("LSS") + ", values; " + to_string(A) + " < " + to_string(B));}
+				result = A < B;
 				break;
 
 
 			case 7:		//EQU - If A is equal to B
-				if (printInstructionCalls) {print(string("EQU") + " r" + to_string(A) + " r" + to_string(B));}
-				result = registers[A] == registers[B];
+				if (printInstructionCalls) {print(string("EQU") + ", values; " + to_string(A) + " == " + to_string(B));}
+				result = A == B;
 				break;
 
 
 			case 8:		//GTR - If A is greater than B
-				if (printInstructionCalls) {print(string("GTR") + " r" + to_string(A) + " r" + to_string(B));}
-				result = registers[A] > registers[B];
+				if (printInstructionCalls) {print(string("GTR") + ", values; " + to_string(A) + " > " + to_string(B));}
+				result = A > B;
 				break;
 
 
 			case 9:		//ADD - Mathmatical A add B
-				if (printInstructionCalls) {print(string("ADD") + " r" + to_string(A) + " r" + to_string(B));}
-				result = registers[A] + registers[B];
+				if (printInstructionCalls) {print(string("ADD") + ", values; " + to_string(A) + " + " + to_string(B));}
+				result = A + B;
 				break;
 
 
-			case 10:		//SUB - Mathmatical A subtract B
-				if (printInstructionCalls) {print(string("SUB") + " r" + to_string(A) + " r" + to_string(B));}
-				result = registers[A] - registers[B];
+			case 10:	//SUB - Mathmatical A subtract B
+				if (printInstructionCalls) {print(string("SUB") + ", values; " + to_string(A) + " - " + to_string(B));}
+				result = A - B;
 				break;
 
 
 			case 11:	//MUL - Mathmatical A multiplied by B
-				if (printInstructionCalls) {print(string("MUL") + " r" + to_string(A) + " r" + to_string(B));}
-				result = registers[A] * registers[B];
+				if (printInstructionCalls) {print(string("MUL") + ", values; " + to_string(A) + " * " + to_string(B));}
+				result = A * B;
 				break;
 
 
 			case 12:	//DIV - Mathmatical A divided by B {Rounds DOWN}
-				if (printInstructionCalls) {print(string("DIV") + " r" + to_string(A) + " r" + to_string(B));}
-				if (registers[B] != 0) {
-					result = floor(registers[A] / registers[B]);
+				if (printInstructionCalls) {print(string("DIV") + ", values; " + to_string(A) + " / " + to_string(B));}
+				if (B != 0) {
+					result = floor(A / B);
 				}
 				break;
 
 
 			case 13:	//ABS - Mathmatical absolute value of A {B unused}
-				if (printInstructionCalls) {print(string("ABS") + " r" + to_string(A));}
-				result = abs(registers[A]);
+				if (printInstructionCalls) {print(string("ABS") + ", abs(" + to_string(A) + ")");}
+				result = abs(A);
 				break;
 
 
 			case 14:	//BRN - Jumps to instruction A if B is true.
-				if (printInstructionCalls) {print(string("BRN") + " if r" + to_string(A));}
 
-				jumpHalfUpper = randomAccessMemory[254] + 128;
-				jumpHalfLower = randomAccessMemory[255] + 128;
+				//Treat the 8 bit values in registers 9 and 10 as 1 16 bit value.
+				jumpHalfUpper = randomAccessMemory[9] + 128;
+				jumpHalfLower = randomAccessMemory[10] + 128;
 
-				binJumpLine = (jumpHalfUpper << 8) | jumpHalfLower;
+				jumpLine = bitset<8>((jumpHalfUpper << 8) | jumpHalfLower).to_ulong();
+				
+				if (printInstructionCalls) {print(string("BRN") + " to line "+ to_string(jumpLine) + " if " + to_string(A) + " == 1");}
 
-				if (registers[A] != 0) {
+				if (A != 0) {
 					// A is treated as an unsigned 8-bit integer for BRN
-					instructionNum = bitset<8>(binJumpLine).to_ulong();  // Adjust for the loop increment
+					instructionNum = jumpLine;  // Adjust for the loop increment
 				}
 				updateOutput = false;
 				break;
@@ -480,7 +470,7 @@ int main() {
 
 
 			case 15:	//UPD - Updates the screen shown to the user.
-				if (printInstructionCalls) {print("UPD the screen.");}
+				if (printInstructionCalls) {print("UPD(ate) the screen.");}
 				glClear(GL_COLOR_BUFFER_BIT);
 				//Render framebuffer to screen.
 				updateTexture(textureID);
@@ -512,7 +502,7 @@ int main() {
 
 
 	print("--Reached end of instructions--");
-	print(to_string(randomAccessMemory[0]));
+
 
 	while (!glfwWindowShouldClose(window)) {
 		//this_thread::sleep_for(33ms);
