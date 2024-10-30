@@ -5,8 +5,12 @@ def %testMacro $A $B
 $A + $B
 end
 
+def %noArgs
+r0 * rOP
+%testMacro rOP r1
+end
+
 %testMacro r1 r3
+%noArgs
 
 r2 / r3
-
-

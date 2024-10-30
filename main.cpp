@@ -16,12 +16,15 @@ using namespace std;
 using namespace glm;
 
 
-const int outputRegister = 255;
+const int outputRegister = 15;
 const int instructionLength = 5;
 const int frameBufferWidth = 24;
 const int frameBufferHeight = 16;
 const int pixelSize = 25;
-int8_t registers[256];
+
+//16 Registers, and 256 RAM Addresses.
+int8_t registers[16];
+int8_t randomAccessMemory[256];
 
 
 //Debug and other testing bools.
@@ -322,80 +325,130 @@ int main() {
 		}
 
 
+
+		if (function > 2) {
+			//For all non-immediate values, 16 is True and 17 is False.
+			A = (A > 15) ? ((A > 16) ? 0 : 1) : A;
+			B = (B > 15) ? ((B > 16) ? 0 : 1) : B;
+		}
+
 		//For logical functions, 0 is false and any other value is true.
 		result = 0;
 		updateOutput = true;
 		switch (function){
-			case 0:		//SET - Sets reg A to value B
+			case 0:		//NOP - Do nothing, blank opcode.
+				updateOutput = false;
+				break;
+
+
+			case 1:		//SET - Sets reg A to value B
 				if (printInstructionCalls) {print(string("SET") + " r" + to_string(A) + " to the value: " + to_string(B - 128));}
+				updateOutput = false;
+				if (A > 15) {
+					//Do not accept this; it is simply a true/false immediate value not a register.
+					break;
+				}
+
 				registers[A] = static_cast<int8_t>(B) - 128;  // Treat B as signed
-				updateOutput = false;
+
+
+				//Only the SET and MOV commands can affect RAM, so check here.
+				//Set the RAM Address to contain the input data if the write register is true.
+				if (registers[11]) {
+					registers[11] = 0;
+					//Is RAM index correct?
+					randomAccessMemory[registers[14] + 128] = registers[13];
+				}
+
+				//Set the READ Register to the contents of the current RAM address.
+				registers[12] = randomAccessMemory[registers[14] + 128];
+
 				break;
 
 
-			case 1:		//MOV - Moves contents of reg A to reg B
+			case 2:		//MOV - Moves contents of reg A to reg B
 				if (printInstructionCalls) {print(string("MOV") + " contents of r" + to_string(A) + " to r" + to_string(B));}
-				registers[B] = registers[A];
-				registers[A] = 0;
+				if (A > 15 and B < 16) {
+					//True/False values
+					registers[B] = (A > 16) ? 0 : 1;
+				} else if (B > 15) {
+					//Do not attempt to write to a pseudo-register.
+					break;
+				} else {
+					registers[B] = registers[A];
+					registers[A] = 0;
+				}
 				updateOutput = false;
+
+
+				//Only the SET and MOV commands can affect RAM, so check here.
+				//Set the RAM Address to contain the input data if the write register is true.
+				if (registers[11]) {
+					registers[11] = 0;
+					randomAccessMemory[registers[14]] = registers[13];
+				}
+
+				//Set the READ Register to the contents of the current RAM address.
+				registers[12] = randomAccessMemory[registers[14]];
+
 				break;
 
 
-			case 2:		//AND - Logical AND of A and B
+			case 3:		//AND - Logical AND of A and B
 				if (printInstructionCalls) {print(string("AND") + " r" + to_string(A) + " r" + to_string(B));}
 				result = registers[A] & registers[B];
 				break;
 
 
-			case 3:		//OR  - Logical OR of A and B
+			case 4:		//OR  - Logical OR of A and B
 				if (printInstructionCalls) {print(string("OR ") + " r" + to_string(A) + " r" + to_string(B));}
 				result = registers[A] || registers[B];
 				break;
 
 
-			case 4:		//NOT - Logical NOT of A {B unused}
+			case 5:		//NOT - Logical NOT of A {B unused}
 				if (printInstructionCalls) {print(string("NOT") + " r" + to_string(A));}
 				result = !registers[A];
 				break;
 
 
-			case 5:		//LSS - If A is less than B
+			case 6:		//LSS - If A is less than B
 				if (printInstructionCalls) {print(string("LSS") + " r" + to_string(A) + " r" + to_string(B));}
 				result = registers[A] < registers[B];
 				break;
 
 
-			case 6:		//EQU - If A is equal to B
+			case 7:		//EQU - If A is equal to B
 				if (printInstructionCalls) {print(string("EQU") + " r" + to_string(A) + " r" + to_string(B));}
 				result = registers[A] == registers[B];
 				break;
 
 
-			case 7:		//GTR - If A is greater than B
+			case 8:		//GTR - If A is greater than B
 				if (printInstructionCalls) {print(string("GTR") + " r" + to_string(A) + " r" + to_string(B));}
 				result = registers[A] > registers[B];
 				break;
 
 
-			case 8:		//ADD - Mathmatical A add B
+			case 9:		//ADD - Mathmatical A add B
 				if (printInstructionCalls) {print(string("ADD") + " r" + to_string(A) + " r" + to_string(B));}
 				result = registers[A] + registers[B];
 				break;
 
 
-			case 9:		//SUB - Mathmatical A subtract B
+			case 10:		//SUB - Mathmatical A subtract B
 				if (printInstructionCalls) {print(string("SUB") + " r" + to_string(A) + " r" + to_string(B));}
 				result = registers[A] - registers[B];
 				break;
 
 
-			case 10:	//MUL - Mathmatical A multiplied by B
+			case 11:	//MUL - Mathmatical A multiplied by B
 				if (printInstructionCalls) {print(string("MUL") + " r" + to_string(A) + " r" + to_string(B));}
 				result = registers[A] * registers[B];
 				break;
 
 
-			case 11:	//DIV - Mathmatical A divided by B {Rounds DOWN}
+			case 12:	//DIV - Mathmatical A divided by B {Rounds DOWN}
 				if (printInstructionCalls) {print(string("DIV") + " r" + to_string(A) + " r" + to_string(B));}
 				if (registers[B] != 0) {
 					result = floor(registers[A] / registers[B]);
@@ -403,17 +456,17 @@ int main() {
 				break;
 
 
-			case 12:	//ABS - Mathmatical absolute value of A {B unused}
+			case 13:	//ABS - Mathmatical absolute value of A {B unused}
 				if (printInstructionCalls) {print(string("ABS") + " r" + to_string(A));}
 				result = abs(registers[A]);
 				break;
 
 
-			case 13:	//BRN - Jumps to instruction A if B is true.
+			case 14:	//BRN - Jumps to instruction A if B is true.
 				if (printInstructionCalls) {print(string("BRN") + " if r" + to_string(A));}
 
-				jumpHalfUpper = registers[248] + 128;
-				jumpHalfLower = registers[249] + 128;
+				jumpHalfUpper = randomAccessMemory[254] + 128;
+				jumpHalfLower = randomAccessMemory[255] + 128;
 
 				binJumpLine = (jumpHalfUpper << 8) | jumpHalfLower;
 
@@ -423,73 +476,18 @@ int main() {
 				}
 				updateOutput = false;
 				break;
-
-
-			case 14:	//REC - Draws rectangle to the frameBuffer
-				if (printInstructionCalls) {print(string("REC") + " (X: " + to_string(A) + ", Y: " + to_string(B) + ")");}
-				ptX = registers[252];
-				ptY = registers[253];
-
-				for (yCoord=0; yCoord < ptY; yCoord++) {
-					for (xCoord=0; xCoord < ptX; xCoord++) {
-						frameBuffer = updatePixel(xCoord + registers[A], yCoord + registers[B], frameBuffer);
-					}
-				}
-				updateOutput = false;
-
-				//Update Screen
-				glClear(GL_COLOR_BUFFER_BIT);
-				//Render framebuffer to screen.
-				updateTexture(textureID);
-				renderQuad(textureID); // Render the textured quad
-				glfwSwapBuffers(window);
-				glfwPollEvents();
 				break;
 
 
-			case 15:	//LNE - Draws line between 2 points (DIM & inputs used)
-				if (printInstructionCalls) {print(string("LNE") + " Starting at: (X: " + to_string(A) + ", Y: " + to_string(B) + ")");}
-				ptX = registers[252];
-				ptY = registers[253];
-				xCoord = registers[A];
-				yCoord = registers[B];
-
-				xDist = abs(xCoord - ptX);
-				yDist = abs(yCoord - ptY);
-
-				xSign = (ptX < xCoord) ? -1 : 1;
-				ySign = (ptY < yCoord) ? -1 : 1;
-				
-				err = xDist - yDist;
-
-				while (true) {
-					frameBuffer = updatePixel(xCoord, yCoord, frameBuffer);
-
-					if (xCoord == ptX && yCoord == ptY) {
-						break;
-					}
-
-					int err2 = 2 * err;  // Temporary variable for error adjustment
-
-					// Adjust error term and coordinate based on Bresenham's condition
-					if (err2 > -yDist) {
-						err -= yDist;
-						xCoord += xSign;
-					}
-					if (err2 < xDist) {
-						err += xDist;
-						yCoord += ySign;
-					}
-				}
-				updateOutput = false;
-
-				//Update Screen
+			case 15:	//UPD - Updates the screen shown to the user.
+				if (printInstructionCalls) {print("UPD the screen.");}
 				glClear(GL_COLOR_BUFFER_BIT);
 				//Render framebuffer to screen.
 				updateTexture(textureID);
 				renderQuad(textureID); // Render the textured quad
 				glfwSwapBuffers(window);
 				glfwPollEvents();
+				updateOutput = false;
 				break;
 
 
@@ -505,12 +503,16 @@ int main() {
 
 		if (updateOutput) {registers[outputRegister] = result;}
 
-
-		instructionNum++;
+		instructionNum++; 
 	}
+
+
 	if (debugFrameBuffer) {printFramebuffer(frameBuffer);}
 
+
+
 	print("--Reached end of instructions--");
+	print(to_string(randomAccessMemory[0]));
 
 	while (!glfwWindowShouldClose(window)) {
 		//this_thread::sleep_for(33ms);

@@ -3,10 +3,12 @@ r2 = #1
 r3 = #16
 r4 = #24
 r5 = #0
+//Initialise values
 
 col cC
 ptr r4 r5
 lne r5 r3 
+//Blue line
 
 col cB
 :loop
@@ -18,4 +20,3 @@ rOP ~ r1
 r1 < r3
 BRN :loop rOP
 //Loops until x=16
-

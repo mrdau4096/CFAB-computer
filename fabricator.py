@@ -1,23 +1,23 @@
 #Binary Opcodes (Processing)
 """
-Bin  | Opc | File-Rep.
+Bin  | Opc | Hex-Rep.
 _____|_____|__________
-0000 | SET | 0XXAA
-0001 | MOV | 1XXYY
-0010 | AND | 2XXYY
-0011 | OR_ | 3XXYY
-0100 | NOT | 4XX00
-0101 | LSS | 5XXYY
-0110 | EQU | 6XXYY
-0111 | GRT | 7XXYY
-1000 | ADD | 8XXYY
-1001 | SUB | 9XXYY
-1010 | MUL | AXXYY
-1011 | DIV | BXXYY
-1100 | ABS | CXX00
-1101 | BRN | DXXYY
-1110 | REC | EXXYY
-1111 | LNE | FXXYY
+0000 | NOP | 00000
+0001 | SET | 1XXAA
+0010 | MOV | 2XXYY
+0011 | AND | 3XXYY
+0100 | OR_ | 4XXYY
+0101 | NOT | 5XX00
+0110 | LSS | 6XXYY
+0111 | EQU | 7XXYY
+1000 | GRT | 8XXYY
+1001 | ADD | 9XXYY
+1010 | SUB | AXXYY
+1011 | MUL | BXXYY
+1100 | DIV | CXXYY
+1101 | ABS | DXX00
+1110 | BRN | EXXYY
+1111 | UPD | FXXYY
 """
 
 #Processing Functions
@@ -45,7 +45,7 @@ BRN			|	 brn A if B is 1 {Conditional}		|	Jumps to A if reg B is 1.
 JMP			|	 brn A 1 {B unused} {Unconditional}	|	Jumps to a marker without a comparison
 EXT 		|	 brn :_end 1 {Unconditional}		|	Exit immediately (Jump to end marker)
 {marker}	|	 :A {B unused}						|	Marker. Used to branch to.
-DEF/END	 |	def %macroName {args}; ...; end 	|	Used to define a macro. Contents of macro added wherever called. Takes {args}.
+DEF/END	 	|	def %macroName {args}; ...; end 	|	Used to define a macro. Contents of macro added wherever called. Takes {args}.
 {macro call}| 	 %macroName {args} 					|	Calls a pre-defined macro. Contents of macro added whenever called. Takes {args}.
 {alias}		|	 $aliasName @ A 					|	Every time $aliasName is encountered, replace with register A (useful for programming formatting.)
 """
@@ -62,10 +62,10 @@ CLR 	|	 pnt 8 8; rec 0 0 		|	Clear screen.
 
 
 opcodes = {
-	"set": "0000", "mov": "0001", "and": "0010", "or": "0011",
-	"not": "0100", "lss": "0101", "equ": "0110", "gtr": "0111",
-	"add": "1000", "sub": "1001", "mul": "1010", "div": "1011",
-	"abs": "1100", "brn": "1101", "rec": "1110", "lne": "1111"
+	"nop": "0000", "set": "0001", "mov": "0010", "and": "0011",
+	"or": "0100", "not": "0101", "lss": "0110", "equ": "0111",
+	"gtr": "1000", "add": "1001", "sub": "1010", "mul": "1011",
+	"div": "1100", "abs": "1101", "brn": "1110", "upd": "1111"
 }
 
 infixOperatorsList = {
@@ -121,7 +121,7 @@ def BRN(line, condition):
 
 def convertAllToBin(operator, A, B):
 	width, height, blank = toBin(24), toBin(16), "0000"
-	zero, one, rT, rF, rX, rY, rCol, rOP = toBin(0), toBin(1), 250, 251, toBin(252), toBin(253), toBin(254), toBin(255)
+	zero, one, rT, rF, rX, rY, rCol, rOP = toBin(0), toBin(1), toBin(16), toBin(17), toBin(252), toBin(253), toBin(254), toBin(255)
 	
 	match operator:
 		case "mov" | "and" | "or" | "lss" | "equ" | "gtr" | "add" | "sub" | "mul" | "div" | "rec" | "lne":
@@ -184,30 +184,30 @@ def convertAllToBin(operator, A, B):
 		case "ext":
 			return BRN(markers["_end"], rT)
 
-		case "col":
+		case "ramread":
 			return (
-				SET(rCol, A),
+				SET(toBin(14), A),
+				opcodes["mov"] + toBin(12) + rOP,
 			)
+
+		case "ramwrite":
+			return (
+				SET(toBin(14), A),
+				opcodes["mov"] + toBin(B) + toBin(13),
+				opcodes["mov"] + rT + toBin(11),
+			)
+
+		case "col":
+			raise FabricationError("Replace these with equivalent RAM chain instructions.")
 
 		case "ptr":
-			return (
-				opcodes["mov"] + toBin(A) + rX,
-				opcodes["mov"] + toBin(B) + rY,
-			)
+			raise FabricationError("Replace these with equivalent RAM chain instructions.")
 
 		case "pix":
-			return (
-				SET(rX, 1),
-				SET(rY, 1),
-				opcodes["rec"] + toBin(A) + toBin(B),
-			)
+			raise FabricationError("Replace these with equivalent RAM chain instructions.")
 
 		case "clr":
-			return (
-				SET(rX, width),
-				SET(rY, height),
-				opcodes["rec"] + zero + zero,
-			)
+			raise FabricationError("Replace these with equivalent RAM chain instructions.")
 
 		case _:
 			raise FabricationError(f"Unknown Command encountered: {operator} {a} {b}")
@@ -216,16 +216,16 @@ def convertAllToBin(operator, A, B):
 
 def convertValues(A):
 	if A.startswith("r"):
-		return int(A.replace("r", ""))
+		registerIndex = int(A.replace("r", ""))
+		if registerIndex > 17: raise FabricationError(f"r{registerIndex} is out of range for registers.\nr0-r15 for values\nr16-r17 for true/false.")
+		return registerIndex
+
 	elif A.startswith("#"):
 		return int(A.replace("#", ""))
-	elif A[0] == "c":
-		colourIndex = int(A[1:], 16)
-		if colourIndex > 15:
-			raise FabricationError(f"Colour indices cannot be out of range [0 → 15]: Encountered value {colourIndex}")
-		return colourIndex
+
 	elif A.startswith(":"):
 		return markers[A.replace(":", "")]
+
 	else:
 		return str(A) #Ensure the fallback is a string.
 
@@ -239,7 +239,7 @@ def convertLine(line):
 	elif len(operands) == 1:
 		operands.extend(["0", "0"])
 
-	if operands[0] in opcodes:
+	if operands[0] in opcodes or operands[0] in ("ext", "lse", "gte", "inv", "sgn", "jmp", "xor", "mod", "ramwrite", "ramread"):
 		#Postfix
 		operator, A, B = operands
 
@@ -247,10 +247,6 @@ def convertLine(line):
 		#Infix
 		A, operator, B = operands
 		operator = infixOperatorsList[operator]
-
-	elif operands[0] in ("ext", "lse", "gte", "inv", "sgn", "jmp", "col", "pix", "clr", "ptr", "xor", "mod"):
-		#Chained or unusual operators
-		operator, A, B = operands
 
 	elif operands[0] in ("!",):
 		operator, A, B = operands
@@ -362,17 +358,13 @@ def replaceMacros(lines, depth=0, activeMacros=None, previousMacro=None):
 
 def replaceAliases(lines):
 	aliases = {
-		"rt": "r250",
-		"rf": "r251",
-		"rx": "r252",
-		"ry": "r253",
-		"rcol": "r254",
-		"rop": "r255",
+		"rop": "r15",
+		"true": "r16",
+		"false": "r17",
 	}
 	aliasReplaced = []
 
 	for lineNum, curLine in enumerate(lines):
-		#print(curLine)
 		"""
 		Define aliasing for register names like so;
 		 varName  @ r1
@@ -398,7 +390,7 @@ def replaceAliases(lines):
 
 
 if __name__ == "__main__":
-	filename = "testgraphics"
+	filename = "ramtest"
 	with open(f"cfab\\{filename}.cfab", "r") as CFABFile:
 		readlines = CFABFile.readlines()
 		partial_lines = [line.strip().lower() for line in readlines if not line.startswith("//")]
@@ -424,10 +416,7 @@ if __name__ == "__main__":
 		markers["_end"] = len(aliasReplaced)-1
 
 
-		preInstructions = []
-		preInstructions.extend(convertAllToBin("set", 250, 1)) #rT | Always a value of 1, True.
-		preInstructions.extend(convertAllToBin("set", 251, 0)) #rF | Always a value of 0, False.
-		fabricated = [f"{int(instruction, 2):05X}" for instruction in preInstructions]
+		fabricated = []
 		#print(aliasReplaced)
 		for line in aliasReplaced:
 			if not line.startswith(":"):
@@ -435,7 +424,7 @@ if __name__ == "__main__":
 				fabricated.extend(convertLine(line))
 
 		del macros, markers
-		del aliasReplaced, preInstructions
+		del aliasReplaced
 
 		
 		#Make the list of hex instructions into a set of bytes.
