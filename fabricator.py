@@ -112,8 +112,8 @@ def BRN(line, condition, bits):
 	binaryLine = str(bin(line)[2:]).zfill(16)
 	halfA, halfB = int(binaryLine[:8], 2), int(binaryLine[8:], 2)
 	return (
-		"0011" + SET(toBin(10), halfA), #Set first JMP register to the first 8 bits.
-		"0011" + SET(toBin(9), halfB), #Set second JMP register to the final 8 bits.
+		"0001" + SET(toBin(25), halfA), #Set first JMP register to the first 8 bits.
+		"0001" + SET(toBin(24), halfB), #Set second JMP register to the final 8 bits.
 		"00" + bits[2] + "0" + opcodes["brn"] + toBin(condition) + toBin(0),
 	)
 
@@ -121,7 +121,7 @@ def BRN(line, condition, bits):
 
 def convertAllToBin(operator, convertedA, convertedB):
 	width, height, blank = toBin(24), toBin(16), "0000"
-	zero, one, rOP = toBin(0), toBin(1), toBin(15)
+	zero, one, rOP = toBin(0), toBin(1), toBin(31)
 
 	initial4Bits = f"00{str(int(bool(convertedA[0])))}{str(int(bool(convertedB[0])))}"
 	A, B = convertedA[1], convertedB[1]
@@ -188,17 +188,33 @@ def convertAllToBin(operator, convertedA, convertedB):
 			return BRN(markers["_end"], one, initial4Bits)
 
 		case "ramread":
+			if not (0 <= A <= 511): raise FabricationError(f"RAM Index cannot be higher than 511, or lower than 0. Got: {A}")
+			binaryLine = str(bin(A)[2:]).zfill(16)
+			halfA, halfB = int(binaryLine[:8], 2), int(binaryLine[8:], 2)
 			return (
-				"000" + initial4Bits[3] + SET(toBin(14), A),
-				"0000" + opcodes["mov"] + toBin(12) + rOP,
+				"0001" + SET(toBin(30), halfA),
+				"0001" + SET(toBin(29), halfB),
+				"0000" + opcodes["mov"] + toBin(27) + rOP,
 			)
 
 		case "ramwrite":
-			return (
-				"000" + initial4Bits[3] + SET(toBin(14), A),
-				"00" + initial4Bits[3] + "0" + opcodes["mov"] + toBin(B) + toBin(13),
-				"0001" + SET(toBin(11), one),
-			)
+			if not (0 <= A <= 511): raise FabricationError(f"RAM Index cannot be higher than 511, or lower than 0. Got: {A}")
+			binaryLine = str(bin(A)[2:]).zfill(16)
+			halfA, halfB = int(binaryLine[:8], 2), int(binaryLine[8:], 2)
+			if initial4Bits[3] == "1":
+				return (
+					"0001" + SET(toBin(30), halfA),
+					"0001" + SET(toBin(29), halfB),
+					"0001" + SET(toBin(28), B),
+					"0001" + SET(toBin(26), one),
+				)
+			else:
+				return (
+					"0001" + SET(toBin(30), halfA),
+					"0001" + SET(toBin(29), halfB),
+					"0000" + opcodes["mov"] + toBin(B) + toBin(28),
+					"0001" + SET(toBin(26), one),
+				)
 
 		case "col":
 			raise FabricationError("Replace these with equivalent RAM chain instructions.")
@@ -220,7 +236,7 @@ def convertAllToBin(operator, convertedA, convertedB):
 def convertValues(A):
 	if A.startswith("r"):
 		registerIndex = int(A.replace("r", ""))
-		if registerIndex > 17: raise FabricationError(f"r{registerIndex} is out of range for registers.\nr0-r15 for values\nr16-r17 for true/false.")
+		if registerIndex > 31: raise FabricationError(f"r{registerIndex} is out of range for registers.\nr0-r15 for values\nr16-r17 for true/false.")
 		return False, registerIndex
 
 	elif A.startswith("#"):
@@ -361,9 +377,7 @@ def replaceMacros(lines, depth=0, activeMacros=None, previousMacro=None):
 
 def replaceAliases(lines):
 	aliases = {
-		"rop": "r15",
-		"true": "r16",
-		"false": "r17",
+		"rop": "r31",
 	}
 	aliasReplaced = []
 

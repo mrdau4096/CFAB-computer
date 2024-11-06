@@ -16,19 +16,19 @@ using namespace std;
 using namespace glm;
 
 
-const int outputRegister = 15;
+const int outputRegister = 31;
 const int instructionLength = 5;
 const int frameBufferWidth = 24;
 const int frameBufferHeight = 16;
 const int pixelSize = 25;
 
 //16 Registers, and 256 RAM Addresses.
-int8_t registers[16];
-int8_t randomAccessMemory[256];
+int8_t registers[32];
+int8_t randomAccessMemory[512];
 
 
 //Debug and other testing bools.
-const bool printInstructionCalls = true;
+const bool printInstructionCalls = false;
 const bool debugFrameBuffer = false;
 
 
@@ -250,8 +250,8 @@ int main() {
 	
 	//Instruction related variables;
 	int8_t result, byte1, byte2, byte3;
-	uint8_t jumpHalfLower, jumpHalfUpper;
-	uint16_t jumpLine;
+	uint8_t combinedHalfLower, combinedHalfUpper;
+	uint16_t combinedRegisters;
 	bool registerManipulationFunction, updateOutput;
 
 
@@ -335,7 +335,7 @@ int main() {
 			case 1:		//SET - Sets reg A to value B
 				if (printInstructionCalls) {print(string("SET") + " r" + to_string(operandA) + " to the value: " + to_string(B));}
 				updateOutput = false;
-				if (AImmediate || !BImmediate) {
+				if (AImmediate) {
 					//Do not accept this; You cannot set an immediate value to another.
 					//You ARE allowed to SET 1 register to another; This copys the data. MOV moves the data.
 					break;
@@ -344,15 +344,22 @@ int main() {
 				*regA = B;
 
 
+				//Treat the 8 bit values in registers 29 and 30 as 1 16 bit value.
+				combinedHalfUpper = registers[29];
+				combinedHalfLower = registers[30];
+
+				combinedRegisters = bitset<8>((combinedHalfUpper << 8) | combinedHalfLower).to_ulong();
+
+
 				//Only the SET and MOV commands can affect RAM, so check here.
 				//Set the RAM Address to contain the input data if the write register is true.
-				if (registers[11]) {
-					registers[11] = 0;
-					randomAccessMemory[registers[14]] = registers[13];
+				if (registers[26]) {
+					registers[26] = 0;
+					randomAccessMemory[combinedRegisters] = registers[28];
 				}
 
 				//Set the READ Register to the contents of the current RAM address.
-				registers[12] = randomAccessMemory[registers[14]];
+				registers[27] = randomAccessMemory[combinedRegisters];
 
 				break;
 
@@ -369,15 +376,22 @@ int main() {
 				updateOutput = false;
 
 
+				//Treat the 8 bit values in registers 29 and 30 as 1 16 bit value.
+				combinedHalfUpper = registers[29];
+				combinedHalfLower = registers[30];
+
+				combinedRegisters = bitset<8>((combinedHalfUpper << 8) | combinedHalfLower).to_ulong();
+
+
 				//Only the SET and MOV commands can affect RAM, so check here.
 				//Set the RAM Address to contain the input data if the write register is true.
-				if (registers[11]) {
-					registers[11] = 0;
-					randomAccessMemory[registers[14]] = registers[13];
+				if (registers[26]) {
+					registers[26] = 0;
+					randomAccessMemory[combinedRegisters] = registers[28];
 				}
 
 				//Set the READ Register to the contents of the current RAM address.
-				registers[12] = randomAccessMemory[registers[14]];
+				registers[27] = randomAccessMemory[combinedRegisters];
 
 				break;
 
@@ -452,20 +466,19 @@ int main() {
 
 			case 14:	//BRN - Jumps to instruction A if B is true.
 
-				//Treat the 8 bit values in registers 9 and 10 as 1 16 bit value.
-				jumpHalfUpper = randomAccessMemory[9] + 128;
-				jumpHalfLower = randomAccessMemory[10] + 128;
+				//Treat the 8 bit values in registers 24 and 25 as 1 16 bit value.
+				combinedHalfUpper = registers[24] + 128;
+				combinedHalfLower = registers[25] + 128;
 
-				jumpLine = bitset<8>((jumpHalfUpper << 8) | jumpHalfLower).to_ulong();
+				combinedRegisters = bitset<8>((combinedHalfUpper << 8) | combinedHalfLower).to_ulong();
 				
-				if (printInstructionCalls) {print(string("BRN") + " to line "+ to_string(jumpLine) + " if " + to_string(A) + " == 1");}
+				if (printInstructionCalls) {print(string("BRN") + " to line "+ to_string(combinedRegisters) + " if " + to_string(A) + " == 1");}
 
 				if (A != 0) {
 					// A is treated as an unsigned 8-bit integer for BRN
-					instructionNum = jumpLine;  // Adjust for the loop increment
+					instructionNum = combinedRegisters;  // Adjust for the loop increment
 				}
 				updateOutput = false;
-				break;
 				break;
 
 
