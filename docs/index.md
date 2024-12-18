@@ -7,6 +7,7 @@ ___
 - [Basic CFAB Commands](commands.md#basic-commands)
 - [Advanced CFAB Commands](commands.md#advanced-commands)
 - [Implementation Specifics](information.md#implementation-specifics)
+  
 ___
 ## Intro to CFAB
 CFAB is a mockup of an assembly-like programming language. Made to run on a custom interpreter (Written in CPP) or used within some of my other projects.
