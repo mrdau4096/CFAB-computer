@@ -38,6 +38,7 @@ ___
 ## Basic Commands
 In CFAB, there are over 30 pre-made commands to choose from; roughly half of those are basic commands.
 
+___
 ### Mathematical Commands;
 | Instruction Name | A | B | Description | Prefix Example | Infix Example |
 | :---: | :---: | :---: | --- | --- | --- |
@@ -50,7 +51,7 @@ In CFAB, there are over 30 pre-made commands to choose from; roughly half of tho
 | `SGN` | int | N/A | Sign of A. | `SGN r2` | N/A |
 | `INV` | int | N/A | Inverts A (1 → -1, -1 → 1) | `INV r2` | N/A |
 
-
+___
 ### Logical Commands;
 | Instruction Name | A | B | Description | Prefix Example | Infix Example |
 | :---: | :---: | :---: | --- | --- | --- |
@@ -69,7 +70,7 @@ In CFAB, there are over 30 pre-made commands to choose from; roughly half of tho
 
 
 
-
+___
 ### Miscellaneous Commands;
 | Instruction Name | A | B | Description | Prefix Example | Infix Example |
 | :---: | :---: | :---: | --- | --- | --- |
@@ -90,6 +91,7 @@ ___
 ## Advanced Commands
 Other commands are, more often than not, pre-made chains of instructions within CFAB.
 
+___
 ### Chain instructions;
 | Instruction Name | A | B | Description | Prefix Example | Infix Example |
 | :---: | :---: | :---: | --- | --- | --- |
@@ -98,7 +100,7 @@ Other commands are, more often than not, pre-made chains of instructions within 
 | `RAMwrite` | int | int | Writes B to RAM address A. | `RAMwrite #12 r2` | N/A |
 | `RAMread` | int | N/A | Reads RAM address A. | `RAMread #12` | N/A |
 
-
+___
 ### Markers;
 Markers are used as jump-points in CFAB. This removes the need for the user to memorise instruction numbers, and so-forth.
 To use a marker, you do like so;
@@ -109,7 +111,7 @@ Later, to jump to that marker in a `BRN` or `JMP`, you would do;
 `BRN :marker {condition}`
 `JMP :marker`
 
-
+___
 ### Aliases;
 You can alias certain registers under other names. Some built-in aliases are like so;
 | Alias | Register | Value |
@@ -117,6 +119,7 @@ You can alias certain registers under other names. Some built-in aliases are lik
 | `rOP` | `r31` | N/A |
 | `True` | N/A | `#1` |
 | `False` | N/A | `#0` |
+
 The goal of aliases is to provide more readable code, in lieu of variable names.
 
 To define your own custom aliases, the syntax is as follows;
@@ -133,7 +136,7 @@ Could be rewritten as;
 `$index @ r1`
 `ADD $index r2`
 
-
+___
 ### Macros;
 Macros work somewhat like functions. However, every time they are called, they are "unpacked" into that space.
 To define a macro, with 2 variable inputs;
@@ -193,7 +196,7 @@ You are permitted to reference other macros within a macro, and can use aliases 
 > [!NOTE]
 > Macros cannot exceed more than 32-deep, and also cannot create infinite loops (referencing itself in the chain)
 
-
+___
 ### Manually interfacing with RAM
 The built in chain-instructions of `RAMwrite` and `RAMread` do multiple things, in order to do so.
 
