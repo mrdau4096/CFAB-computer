@@ -40,6 +40,7 @@ In CFAB, there are over 30 pre-made commands to choose from; roughly half of tho
 
 ___
 ### Mathematical Commands;
+
 | Instruction Name | A | B | Description | Prefix Example | Infix Example |
 | :---: | :---: | :---: | --- | --- | --- |
 | `ADD` | int | int | Sum of A and B. | `ADD r0 #1` | `r0 + #1` |
@@ -53,6 +54,7 @@ ___
 
 ___
 ### Logical Commands;
+
 | Instruction Name | A | B | Description | Prefix Example | Infix Example |
 | :---: | :---: | :---: | --- | --- | --- |
 | `AND` | bool | bool | Boolean A AND B | `AND r0 r1` | `r0 & r1` |
@@ -72,6 +74,7 @@ ___
 
 ___
 ### Miscellaneous Commands;
+
 | Instruction Name | A | B | Description | Prefix Example | Infix Example |
 | :---: | :---: | :---: | --- | --- | --- |
 | `SET` | reg | int | Sets a given register to a given value. | `SET r0 #2` | `r0 = #2` |
@@ -93,6 +96,7 @@ Other commands are, more often than not, pre-made chains of instructions within 
 
 ___
 ### Chain instructions;
+
 | Instruction Name | A | B | Description | Prefix Example | Infix Example |
 | :---: | :---: | :---: | --- | --- | --- |
 | `BRN` | marker | bool | Jumps to instruction A, if B. | `BRN :marker r0` | N/A |
@@ -114,6 +118,7 @@ Later, to jump to that marker in a `BRN` or `JMP`, you would do;
 ___
 ### Aliases;
 You can alias certain registers under other names. Some built-in aliases are like so;
+
 | Alias | Register | Value |
 | --- | :---: | :---: |
 | `rOP` | `r31` | N/A |
